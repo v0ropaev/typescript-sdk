@@ -67,6 +67,39 @@ describe('SSEServerTransport', () => {
             expect(mockRes.write).toHaveBeenCalledWith(`event: endpoint\ndata: /messages?sessionId=${expectedSessionId}\n\n`);
         });
 
+        it('keeps a path-relative endpoint path-relative', async () => {
+            // The client resolves this against the URL it opened the stream on,
+            // and an absolute path would replace that URL's whole path, dropping
+            // any prefix a proxy put in front of the server.
+            const mockRes = createMockResponse();
+            const transport = new SSEServerTransport('messages', mockRes);
+            const expectedSessionId = transport.sessionId;
+
+            await transport.start();
+
+            expect(mockRes.write).toHaveBeenCalledWith(`event: endpoint\ndata: messages?sessionId=${expectedSessionId}\n\n`);
+        });
+
+        it('keeps the trailing slash of a path-relative endpoint', async () => {
+            const mockRes = createMockResponse();
+            const transport = new SSEServerTransport('messages/', mockRes);
+            const expectedSessionId = transport.sessionId;
+
+            await transport.start();
+
+            expect(mockRes.write).toHaveBeenCalledWith(`event: endpoint\ndata: messages/?sessionId=${expectedSessionId}\n\n`);
+        });
+
+        it('still sends an absolute path for an endpoint given as a full URL', async () => {
+            const mockRes = createMockResponse();
+            const transport = new SSEServerTransport('https://other.example/messages', mockRes);
+            const expectedSessionId = transport.sessionId;
+
+            await transport.start();
+
+            expect(mockRes.write).toHaveBeenCalledWith(`event: endpoint\ndata: /messages?sessionId=${expectedSessionId}\n\n`);
+        });
+
         it('should correctly append sessionId to an endpoint with existing query parameters', async () => {
             const mockRes = createMockResponse();
             const endpoint = '/messages?foo=bar&baz=qux';

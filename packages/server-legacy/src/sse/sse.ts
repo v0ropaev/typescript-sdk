@@ -90,7 +90,18 @@ export class SSEServerTransport implements Transport {
         const endpointUrl = new URL(this._endpoint, dummyBase);
         endpointUrl.searchParams.set('sessionId', this._sessionId);
 
-        const relativeUrlWithSession = endpointUrl.pathname + endpointUrl.search + endpointUrl.hash;
+        // A path-relative endpoint has to stay path-relative. The client resolves
+        // whatever it reads here against the URL it opened the stream on, and an
+        // absolute-path reference replaces that URL's whole path (RFC 3986 section
+        // 5.3), so a server reached through a prefix it does not know about loses
+        // the prefix. Taking `endpointUrl.pathname` turns every endpoint into an
+        // absolute path, which left no way to configure one that survives. Keep
+        // the form the caller passed: an absolute path or a full URL stays
+        // absolute, 'messages' stays 'messages'.
+        const endpointIsAbsolute = this._endpoint === '' || this._endpoint.startsWith('/') || URL.canParse(this._endpoint);
+        const endpointPath = endpointIsAbsolute ? endpointUrl.pathname : endpointUrl.pathname.slice(1);
+
+        const relativeUrlWithSession = endpointPath + endpointUrl.search + endpointUrl.hash;
 
         this.res.write(`event: endpoint\ndata: ${relativeUrlWithSession}\n\n`);
 

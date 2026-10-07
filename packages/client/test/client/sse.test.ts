@@ -246,6 +246,44 @@ describe('SSEClientTransport', () => {
 
             await expect(transport.send(testMessage)).rejects.toThrow(/500/);
         });
+
+        it('posts under the subpath the stream was opened on when the endpoint is path-relative', async () => {
+            // A server behind a proxy that mounts it under a prefix cannot know
+            // the prefix, so it can only name the message endpoint relative to
+            // the stream URL. An absolute path would replace the whole path when
+            // the client resolves it, dropping the prefix (RFC 3986 section 5.3).
+            await resourceServer.close();
+
+            const posted: string[] = [];
+            resourceServer = createServer((req, res) => {
+                if (req.method === 'GET') {
+                    res.writeHead(200, {
+                        'Content-Type': 'text/event-stream',
+                        'Cache-Control': 'no-cache, no-transform',
+                        Connection: 'keep-alive'
+                    });
+                    res.write('event: endpoint\n');
+                    res.write('data: messages?sessionId=abc\n\n');
+                    return;
+                }
+                posted.push(req.url ?? '');
+                let body = '';
+                req.on('data', chunk => {
+                    body += chunk;
+                });
+                req.on('end', () => res.end());
+            });
+
+            const origin = await listenOnRandomPort(resourceServer);
+            resourceBaseUrl = new URL('/subpath/sse', origin);
+
+            transport = new SSEClientTransport(resourceBaseUrl);
+            await transport.start();
+
+            await transport.send({ jsonrpc: '2.0', id: 'test-1', method: 'test', params: {} });
+
+            expect(posted).toEqual(['/subpath/messages?sessionId=abc']);
+        });
     });
 
     describe('header handling', () => {
